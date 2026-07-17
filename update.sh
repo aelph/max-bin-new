@@ -3,6 +3,7 @@
 #
 #   ./update.sh            — проверить, собрать, установить, закоммитить
 #   ./update.sh check      — только проверить наличие новой версии
+#   ./update.sh notify     — тихая проверка с уведомлением на рабочий стол (для systemd-таймера)
 #   ./update.sh rollback   — показать локальные версии для отката
 #   ./update.sh rollback <версия> — установить указанную локальную версию
 
@@ -36,6 +37,19 @@ check)
         exit 10
     else
         echo "Обновление не требуется."
+    fi
+    ;;
+
+notify)
+    # Для systemd-таймера: молча выйти при недоступности сети,
+    # показать уведомление только если вышла новая версия.
+    cur=$(current_version)
+    new=$(latest_version) || exit 0
+    [[ -n "$new" ]] || exit 0
+    if [[ $(vercmp "$new" "$cur") -gt 0 ]]; then
+        notify-send -a "MAX" -i max \
+            "Вышло обновление MAX $new" \
+            "Установлена версия $cur. Для обновления запустите: $(pwd)/update.sh"
     fi
     ;;
 
@@ -77,7 +91,7 @@ rollback)
     ;;
 
 *)
-    echo "Использование: $0 [check|update|rollback [версия]]" >&2
+    echo "Использование: $0 [check|notify|update|rollback [версия]]" >&2
     exit 2
     ;;
 esac

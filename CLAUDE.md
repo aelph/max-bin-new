@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./update.sh check` — сравнить локальную версию с официальным RPM-репозиторием (`download.max.ru`, метаданные `repodata/`). Код возврата 10 — доступно обновление.
 - `./update.sh` — если вышла новая версия: правит `pkgver` в `PKGBUILD`, `updpkgsums`, `makepkg -f`, перегенерация `.SRCINFO`, коммит `Update <pkgver>`, установка через `sudo pacman -U`.
 - `./update.sh rollback [версия]` — откат на ранее собранную локальную версию; альтернатива — установить `max-bin` из AUR (пакеты взаимно конфликтуют и замещают друг друга).
+- `./update.sh notify` — тихая проверка с уведомлением через `notify-send`; вызывается systemd-таймером пользователя `max-update-check.timer` (юниты в `~/.config/systemd/user/`, проверка ежедневная). При недоступности сети завершается молча.
 
 Полный номер версии (`X.Y.Z.BUILD`) существует только в имени RPM-файла (`MAX-<версия>.rpm` в `location href` внутри `primary.xml.gz`); атрибут `ver` в метаданных содержит усечённую версию без номера сборки — не использовать его для сравнения.
 
