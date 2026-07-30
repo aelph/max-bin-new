@@ -47,7 +47,7 @@ notify)
     new=$(latest_version) || exit 0
     [[ -n "$new" ]] || exit 0
     if [[ $(vercmp "$new" "$cur") -gt 0 ]]; then
-        notify-send -a "MAX" -i max \
+        notify-send -a "MAX" -i max -u critical \
             "Вышло обновление MAX $new" \
             "Установлена версия $cur. Для обновления запустите: $(pwd)/update.sh"
     fi

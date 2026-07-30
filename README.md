@@ -23,8 +23,10 @@ Everything is driven by a single script:
 
 The units `max-update-check.service` and `max-update-check.timer` live in `~/.config/systemd/user/`
 (**outside this repository** — copy them separately when moving to another machine).
-The timer fires daily (plus a random delay of up to an hour); `Persistent=true` means a check
-missed while the machine was off runs on the next boot.
+The timer fires daily at 12:00 (plus a random delay of up to an hour) — during the day, so the
+notification is not missed overnight; `Persistent=true` means a check missed while the machine
+was off runs on the next boot. The notification is sent with `critical` urgency: it stays on
+screen until dismissed.
 
 ```
 systemctl --user list-timers max-update-check.timer   # timer status
