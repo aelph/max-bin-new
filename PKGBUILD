@@ -11,7 +11,7 @@ url='https://max.ru'
 license=("custom:max")
 categories=("network")
 
-depends=("libxcb" "libxinerama" "libxcomposite" "xcb-util-wm" "xcb-util-cursor" "libva" "libxaw"  "libvdpau" "libnotify" "desktop-file-utils" "libxres")
+depends=("ca-certificates" "glib2" "libxcb" "libxinerama" "libxcomposite" "libxss" "xcb-util-wm" "xcb-util-cursor" "xcb-util-keysyms" "libxkbcommon" "libva" "libxaw" "libvdpau" "libnotify" "gsettings-desktop-schemas" "libxres" "libglvnd")
 optdepends=('gnome-keyring: Fixses startup in Gmome. Store passwords and encryption keys.' 'hicolor-icon-theme')
 options=('!strip' '!debug')
 
