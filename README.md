@@ -3,9 +3,35 @@
 **Русская версия: [ПРОЧТИ.md](ПРОЧТИ.md)**
 
 A local (not published to AUR) Arch Linux package for the **MAX** messenger (https://max.ru).
-A fork of the AUR package [max-bin](https://aur.archlinux.org/packages/max-bin) with update automation.
+A fork of the AUR package [max-bin](https://aur.archlinux.org/packages/max-bin) with update automation and **a fix for broken audio/video calls**.
 
 This is a binary package: the official EL9 RPM is repackaged as-is, without rebuilding.
+
+## Audio and video calls do not work with the AUR package
+
+If you installed MAX from the AUR package `max-bin` (or straight from the RPM) and calls silently fail while voice and video *messages* record and send just fine — this is why.
+
+Calls are handled by a separate process, `/usr/share/max/bin/max-service/bin/max-service`, and on Arch it dies the moment it starts:
+
+```
+$ /usr/share/max/bin/max-service/bin/max-service
+libsystemd.so.0: version `LIBSYSTEMD_251' not found (required by /usr/lib/libmount.so.1)
+```
+
+The RPM bundles `libsystemd.so.0.23.0` from EL9 in `bin/max-service/lib64/`, and `max-service` carries `RPATH $ORIGIN:$ORIGIN/../lib64` — so the bundled copy shadows the system one. At the same time the system `libglib-2.0.so.0` pulls in the system `libmount.so.1`, which needs the symbol version `LIBSYSTEMD_251` that the EL9 copy does not provide. Every Arch install is affected, because `util-linux` here is always built against current systemd.
+
+Recording and sending voice/video messages keeps working because that runs inside the main `max` process, which has no bundled `libsystemd` — which is exactly why the breakage is easy to miss.
+
+**The fix**, applied by this package in `package()`, is to drop the bundled copies so the system libraries are used:
+
+```bash
+rm -f "${pkgdir}/usr/share/max/bin/max-service/lib64/libsystemd.so.0"*
+rm -f "${pkgdir}/usr/share/max/bin/max-service/lib64/libpcre2-8.so.0"*
+```
+
+Nothing in the bundle links against `libsystemd` directly (checked with `readelf -d`) — it is only pulled in transitively through the system glib, so removing it is safe. The bundled `libpcre2-8.so.0` is the same class of problem: it makes the system glib print `no version information available`. With both gone, `max-service` starts cleanly and calls work.
+
+The fix is not tied to any particular version, so it survives updates. To verify after an update, run `max-service` by hand — a healthy start prints `RPC port: <number>` and the settings paths, with no `not found` lines.
 
 ## Usage
 
@@ -51,5 +77,6 @@ The timer never installs anything by itself — you only get a notification; the
 - **`.gitignore` is a whitelist:** everything is ignored except files listed explicitly. To track a new file, first add a `!filename` line.
 - **The version number** (`X.Y.Z.BUILD`) is parsed from RPM file names in the repository metadata; the `ver` attribute there is truncated and unusable for comparison.
 - **Dependencies were picked by hand** for a closed-source binary (e.g. `libxres` is required for calls). After major updates, verify that the application starts and calls work — new libraries may be needed.
+- **Check `max-service` after an update.** Calls live in a separate process, so launching the main application proves nothing about them. If a new RPM ships another bundled library that shadows a system one, add it to the `rm -f` list in `package()`. To find such conflicts across the whole package: `cd /usr/share/max && find . -type f \( -name '*.so*' -o -perm -u+x \) -exec sh -c 'ldd "$1" 2>&1 | grep -q "not found" && echo "$1"' _ {} \;`
 - **`notify` stays silent when the network is down** — by design, to avoid false notifications.
 - **MAX for Linux has no built-in self-updater:** on native RPM systems updates arrive via the dnf repository. This script is the Arch equivalent of that mechanism.
