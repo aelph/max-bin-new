@@ -29,4 +29,8 @@ package() {
     cp -a "${srcdir}/usr/"  "${pkgdir}/usr/"
     mkdir -p "${pkgdir}/usr/bin/"
     ln -sf "/usr/share/max/bin/max" "${pkgdir}/usr/bin/max"
+
+    # Встроенные библиотеки из EL9 перекрывают системные через RPATH ($ORIGIN/../lib64) и ломают max-service — процесс звонков. Системный libmount.so.1 требует LIBSYSTEMD_251, которого нет в libsystemd.so.0.23.0 из RPM, из-за чего сервис падает при старте и звонки не работают. Напрямую с ними в бандле никто не слинкован, они подтягиваются только транзитивно через системный glib.
+    rm -f "${pkgdir}/usr/share/max/bin/max-service/lib64/libsystemd.so.0"*
+    rm -f "${pkgdir}/usr/share/max/bin/max-service/lib64/libpcre2-8.so.0"*
 }
