@@ -21,18 +21,24 @@ latest_version() {
         | grep -oP '(?<=href="MAX-)[0-9][^"]*(?=\.rpm")' | sort -V | tail -1
 }
 
+# Версия в PKGBUILD: может опережать установленную, если коммит пришёл с другой машины.
 current_version() {
     grep -oP '(?<=^pkgver=).*' PKGBUILD
+}
+
+# Установленная версия без pkgrel; пустая строка, если пакет не установлен.
+installed_version() {
+    { pacman -Q "$PKGNAME" 2>/dev/null || true; } | sed -E 's/^.* (.+)-[^-]+$/\1/'
 }
 
 cmd="${1:-update}"
 
 case "$cmd" in
 check)
-    cur=$(current_version); new=$(latest_version)
-    echo "Локальная версия:  $cur"
-    echo "Версия в RPM-репо: $new"
-    if [[ $(vercmp "$new" "$cur") -gt 0 ]]; then
+    cur=$(installed_version); new=$(latest_version)
+    echo "Установленная версия: ${cur:-не установлен}"
+    echo "Версия в RPM-репо:    $new"
+    if [[ $(vercmp "$new" "${cur:-0}") -gt 0 ]]; then
         echo "Доступно обновление. Запустите: ./update.sh"
         exit 10
     else
@@ -43,30 +49,36 @@ check)
 notify)
     # Для systemd-таймера: молча выйти при недоступности сети,
     # показать уведомление только если вышла новая версия.
-    cur=$(current_version)
+    cur=$(installed_version)
     new=$(latest_version) || exit 0
     [[ -n "$new" ]] || exit 0
-    if [[ $(vercmp "$new" "$cur") -gt 0 ]]; then
+    if [[ $(vercmp "$new" "${cur:-0}") -gt 0 ]]; then
         notify-send -a "MAX" -i max -u critical \
             "Вышло обновление MAX $new" \
-            "Установлена версия $cur. Для обновления запустите: $(pwd)/update.sh"
+            "Установлена версия ${cur:-не установлен}. Для обновления запустите: $(pwd)/update.sh"
     fi
     ;;
 
 update)
-    cur=$(current_version); new=$(latest_version)
-    if [[ $(vercmp "$new" "$cur") -le 0 ]]; then
+    # Забрать коммиты с других машин, чтобы не создавать дублирующий «Update <версия>».
+    git pull --ff-only
+    cur=$(installed_version); new=$(latest_version)
+    if [[ $(vercmp "$new" "${cur:-0}") -le 0 ]]; then
         echo "Уже актуальная версия: $cur"
         exit 0
     fi
-    echo "Обновление $cur -> $new"
-    sed -i -e "s/^pkgver=.*/pkgver=$new/" -e "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+    echo "Обновление ${cur:-не установлен} -> $new"
+    if [[ $(current_version) != "$new" ]]; then
+        sed -i -e "s/^pkgver=.*/pkgver=$new/" -e "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+    fi
     updpkgsums
     makepkg -f
     makepkg --printsrcinfo > .SRCINFO
     git add PKGBUILD .SRCINFO
-    git commit -m "Update $new"
-    sudo pacman -U "${PKGNAME}-${new}-1-x86_64.pkg.tar.zst"
+    # Если версия уже подтянута с другой машины, коммитить нечего.
+    git diff --cached --quiet || git commit -m "Update $new"
+    pkgrel=$(grep -oP '(?<=^pkgrel=).*' PKGBUILD)
+    sudo pacman -U "${PKGNAME}-${new}-${pkgrel}-x86_64.pkg.tar.zst"
     echo "Готово: установлена версия $new."
     ;;
 

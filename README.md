@@ -39,8 +39,8 @@ Everything is driven by a single script:
 
 | Command | What it does |
 |---|---|
-| `./update.sh check` | Compares the local version against the official RPM repository. Exit code `10` means an update is available. |
-| `./update.sh` | Full cycle: bumps `pkgver` in `PKGBUILD` → `updpkgsums` → `makepkg -f` → regenerates `.SRCINFO` → commits `Update <version>` → `sudo pacman -U`. |
+| `./update.sh check` | Compares the installed version against the official RPM repository. Exit code `10` means an update is available. |
+| `./update.sh` | Full cycle: `git pull --ff-only` → bumps `pkgver` in `PKGBUILD` → `updpkgsums` → `makepkg -f` → regenerates `.SRCINFO` → commits `Update <version>` → `sudo pacman -U`. If the version bump was already pulled from another machine, it only builds and installs, without a commit. |
 | `./update.sh notify` | Silent check with a desktop notification (`notify-send`). Used by the systemd timer. |
 | `./update.sh rollback` | Lists locally kept builds. |
 | `./update.sh rollback <version>` | Rolls back to the given build (`sudo pacman -U`). |
