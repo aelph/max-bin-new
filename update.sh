@@ -79,6 +79,8 @@ update)
     git diff --cached --quiet || git commit -m "Update $new"
     pkgrel=$(grep -oP '(?<=^pkgrel=).*' PKGBUILD)
     sudo pacman -U "${PKGNAME}-${new}-${pkgrel}-x86_64.pkg.tar.zst"
+    # Отправить коммит сразу, чтобы другие машины подтянули его, а не создали свой.
+    git push -q || echo "Предупреждение: git push не удался, выполните его вручную." >&2
     echo "Готово: установлена версия $new."
     ;;
 
