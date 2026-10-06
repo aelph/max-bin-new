@@ -78,5 +78,5 @@ The timer never installs anything by itself — you only get a notification; the
 - **The version number** (`X.Y.Z.BUILD`) is parsed from RPM file names in the repository metadata; the `ver` attribute there is truncated and unusable for comparison.
 - **Dependencies were picked by hand** for a closed-source binary (e.g. `libxres` is required for calls). After major updates, verify that the application starts and calls work — new libraries may be needed.
 - **Check `max-service` after an update.** Calls live in a separate process, so launching the main application proves nothing about them. If a new RPM ships another bundled library that shadows a system one, add it to the `rm -f` list in `package()`. To find such conflicts across the whole package: `cd /usr/share/max && find . -type f \( -name '*.so*' -o -perm -u+x \) -exec sh -c 'ldd "$1" 2>&1 | grep -q "not found" && echo "$1"' _ {} \;`
-- **`notify` stays silent when the network is down** — by design, to avoid false notifications.
+- **`notify` stays silent if the network never comes up** — by design, to avoid false notifications. Right after boot (`Persistent=true` runs the missed check before the network is up) it retries for up to 5 minutes.
 - **MAX for Linux has no built-in self-updater:** on native RPM systems updates arrive via the dnf repository. This script is the Arch equivalent of that mechanism.
