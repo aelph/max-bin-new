@@ -6,6 +6,8 @@
 #   ./update.sh notify     — тихая проверка с уведомлением на рабочий стол (для systemd-таймера)
 #   ./update.sh rollback   — показать локальные версии для отката
 #   ./update.sh rollback <версия> — установить указанную локальную версию
+#
+# Код возврата 11 у check и update — новая версия опубликована битой (см. release_ok).
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -13,12 +15,30 @@ cd "$(dirname "$0")"
 REPO_URL="https://download.max.ru/linux/rpm/el/9/x86_64"
 PKGNAME="max-bin-new"
 
-latest_version() {
+# Защита от битых релизов, общая для update.sh в yandex-music-pkg, max-bin и claude-desktop.
+# 20.10.2026 Яндекс опубликовал Яндекс Музыку 5.124.1, чей deb весил 96 байт: в ar-архиве лежал только пустой индекс «__.SYMDEF SORTED», без control.tar и data.tar. Фид указывал именно этот размер и контрольную сумму именно этого файла, поэтому проверка суммы релиз пропустила, а сборка упала на распаковке.
+# Настоящие сборки всех трёх программ весят десятки и сотни мегабайт, поэтому размер пакета из метаданных источника сверяется с порогом в 1 МиБ. Релиз меньше порога или без указанного размера считается битым: check и update сообщают о нём и выходят с кодом 11, notify молчит до тех пор, пока издатель не перевыпустит пакет.
+MIN_SIZE=$((1024 * 1024))
+
+release_ok() {
+    [[ "${1:-}" =~ ^[0-9]+$ ]] && (( $1 >= MIN_SIZE ))
+}
+
+broken_release() {
+    echo "Версия $1 опубликована битой (размер пакета: ${2:-не указан} байт), обновление пропущено." >&2
+    exit 11
+}
+
+latest_entry() {
+    # Выводит «версия размер» самой свежей версии. В primary.xml элемент <size package="…"> идёт внутри <package> раньше <location href="MAX-<версия>.rpm">.
     local primary
     primary=$(curl -fsSL "${REPO_URL}/repodata/repomd.xml" \
         | grep -oP '(?<=href=")repodata/[^"]*primary\.xml\.gz')
-    curl -fsSL "${REPO_URL}/${primary}" | gunzip \
-        | grep -oP '(?<=href="MAX-)[0-9][^"]*(?=\.rpm")' | sort -V | tail -1
+    curl -fsSL "${REPO_URL}/${primary}" | gunzip | awk '
+        /<package / { s = "" }
+        match($0, /<size package="[0-9]+"/) { s = substr($0, RSTART + 15, RLENGTH - 16) }
+        match($0, /href="MAX-[0-9][^"]*\.rpm"/) { print substr($0, RSTART + 10, RLENGTH - 15), s }' \
+        | sort -V -k1,1 | tail -1
 }
 
 # Версия в PKGBUILD: может опережать установленную, если коммит пришёл с другой машины.
@@ -35,10 +55,12 @@ cmd="${1:-update}"
 
 case "$cmd" in
 check)
-    cur=$(installed_version); new=$(latest_version)
+    cur=$(installed_version); entry=$(latest_entry)
+    read -r new size <<<"$entry"
     echo "Установленная версия: ${cur:-не установлен}"
     echo "Версия в RPM-репо:    $new"
     if [[ $(vercmp "$new" "${cur:-0}") -gt 0 ]]; then
+        release_ok "$size" || broken_release "$new" "$size"
         echo "Доступно обновление. Запустите: ./update.sh"
         exit 10
     else
@@ -52,14 +74,16 @@ notify)
     # Persistent=true запускает пропущенную проверку сразу после загрузки,
     # когда сети может ещё не быть: повторять попытки до 5 минут.
     cur=$(installed_version)
-    new=""
+    entry=""
     for _ in {1..10}; do
-        new=$(latest_version 2>/dev/null) && [[ -n "$new" ]] && break
-        new=""
+        entry=$(latest_entry 2>/dev/null) && [[ -n "$entry" ]] && break
+        entry=""
         sleep 30
     done
-    [[ -n "$new" ]] || exit 0
-    if [[ $(vercmp "$new" "${cur:-0}") -gt 0 ]]; then
+    [[ -n "$entry" ]] || exit 0
+    read -r new size <<<"$entry"
+    # О битом релизе не уведомляем: обновиться на него всё равно нельзя.
+    if [[ $(vercmp "$new" "${cur:-0}") -gt 0 ]] && release_ok "$size"; then
         notify-send -a "MAX" -i max -u critical \
             "Вышло обновление MAX $new" \
             "Установлена версия ${cur:-не установлен}. Для обновления запустите: $(pwd)/update.sh"
@@ -69,11 +93,13 @@ notify)
 update)
     # Забрать коммиты с других машин, чтобы не создавать дублирующий «Update <версия>».
     git pull --ff-only
-    cur=$(installed_version); new=$(latest_version)
+    cur=$(installed_version); entry=$(latest_entry)
+    read -r new size <<<"$entry"
     if [[ $(vercmp "$new" "${cur:-0}") -le 0 ]]; then
         echo "Уже актуальная версия: $cur"
         exit 0
     fi
+    release_ok "$size" || broken_release "$new" "$size"
     echo "Обновление ${cur:-не установлен} -> $new"
     if [[ $(current_version) != "$new" ]]; then
         sed -i -e "s/^pkgver=.*/pkgver=$new/" -e "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
